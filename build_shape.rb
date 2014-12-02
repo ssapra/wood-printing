@@ -3,7 +3,7 @@ require 'optparse'
 PRELUDE = ["G21", "M107", "M104 S180", "G28 X0 Y0", "G29", "M109 S180", "G90", "G92 E0"]
 FOOTER = ["G92 E0", "M107", "M104 S0", "G28 X0", "G28 Y0", "M84"]
 LAYER_HEIGHT = 0.4
-MAX_WIDTH = 90.0
+MAX_WIDTH = 100.0
 CENTER_X = MAX_WIDTH / 2.0
 CENTER_Y = MAX_WIDTH / 2.0
 FEED_RATE = 800.00
@@ -24,53 +24,30 @@ def build_footer
   FOOTER.each {|code| puts code }
 end
 
-def build_square(start_x, start_y, length, lh)
+def build_square(start_x, start_y, length)
   puts "G0 X#{start_x} Y#{start_y}"
   $extrude += length/5
-  puts "G1 Z#{lh} F#{FEED_RATE}"
   puts "G1 X#{start_x + length} Y#{start_y} E#{$extrude}"
   $extrude += length/5
-  puts "G1 Z#{lh} F#{FEED_RATE}"
   puts "G1 X#{start_x + length} Y#{start_y + length} E#{$extrude}"
   $extrude += length/5
-  puts "G1 Z#{lh} F#{FEED_RATE}"
   puts "G1 X#{start_x} Y#{start_y + length} E#{$extrude}"
   $extrude += length/5
-  puts "G1 Z#{lh} F#{FEED_RATE}"
   puts "G1 X#{start_x} Y#{start_y} E#{$extrude}"
 end
 
-def build_square_infill(start_x, start_y, length, lh)
+def build_square_infill(start_x, start_y, length)
   (0.0..(length/2.0 - 1.5)).step(1).each do |offset|
-    build_square(start_x + offset, start_y + offset, length - 2*(offset).abs, lh)
+    build_square(start_x + offset, start_y + offset, length - 2*(offset).abs)
   end
 end
 
-def make_skirt(lh)
-  new_start_x = 0
-  new_start_y = 0
-  new_length = 95
-  puts "G0 X#{new_start_x} Y#{new_start_y}"
-  $extrude = new_length/5
-  puts "G1 Z#{lh} F#{FEED_RATE}"
-  puts "G1 X#{new_start_x + new_length} Y#{new_start_y} E#{$extrude}"
-  $extrude += new_length/5
-  puts "G1 Z#{lh} F#{FEED_RATE}"
-  puts "G1 X#{new_start_x + new_length} Y#{new_start_y + new_length} E#{$extrude}"
-  $extrude += new_length/5
-  puts "G1 Z#{lh} F#{FEED_RATE}"
-  puts "G1 X#{new_start_x} Y#{new_start_y + new_length} E#{$extrude}"
-  puts "G1 Z#{lh} F#{FEED_RATE}"
-  $extrude += new_length/5
-  puts "G1 X#{new_start_x} Y#{new_start_y} E#{$extrude}"
-end
-
-def switch_temp(temp, lh)
+def switch_temp(temp)
   reset_extruder
   puts "G1 X0 Y0"
   puts "M104 S#{temp}"
   puts "M109 S#{temp}"
-  puts "E5.0"
+  puts "E10.0"
   reset_extruder
   $current_temp = temp
 end
@@ -87,7 +64,8 @@ end
 def build_pyramid(base_width, start_x, start_y, use_color, stripe_height)
   build_prelude
   reset_extruder
-  make_skirt(0.350)
+  skirt_width = [base_width + 20.0, MAX_WIDTH - 10].min
+  build_square(CENTER_X - skirt_width/2.0, CENTER_Y - skirt_width/2.0, skirt_width)
   reset_extruder
 
   height = base_width * Math.sqrt(2)/2.0
@@ -106,18 +84,18 @@ def build_pyramid(base_width, start_x, start_y, use_color, stripe_height)
     reset_extruder
     set_z_value(layer_height)
 
-    start_x_offset = start_x + layer_height/(Math.sqrt(2))
+    start_x_offset = start_x + (layer_height - START_Z)/(Math.sqrt(2))
     start_y_offset = start_y + layer_height/(Math.sqrt(2))
     width = base_width - layer_height / (Math.sqrt(2)/2.0)
 
     if use_color && colored_layer_heights.include?(layer_height)
-      switch_temp(HIGH_TEMP, layer_height) if $current_temp != HIGH_TEMP
+      switch_temp(HIGH_TEMP) if $current_temp != HIGH_TEMP
     elsif use_color && !colored_layers.include?(layer_height)
-      switch_temp(NORMAL_TEMP, layer_height) if $current_temp != NORMAL_TEMP
+      switch_temp(NORMAL_TEMP) if $current_temp != NORMAL_TEMP
     end
 
-    build_square(start_x_offset, start_y_offset, width, layer_height)
-    build_square_infill(start_x_offset, start_y_offset, width, layer_height)
+    build_square(start_x_offset, start_y_offset, width)
+    build_square_infill(start_x_offset, start_y_offset, width)
   end
 
   build_footer
@@ -157,9 +135,9 @@ def build_curved_object(start_x, start_y, radius, height, calc_radius, use_color
     end
 
     if use_color && colored_layer_heights.include?(z_value)
-      switch_temp(HIGH_TEMP, z_value) if $current_temp != HIGH_TEMP
+      switch_temp(HIGH_TEMP) if $current_temp != HIGH_TEMP
     elsif use_color && !colored_layers.include?(z_value)
-      switch_temp(NORMAL_TEMP, z_value) if $current_temp != NORMAL_TEMP
+      switch_temp(NORMAL_TEMP) if $current_temp != NORMAL_TEMP
     end
 
     build_circle(start_x, start_y, radius_max)
@@ -206,48 +184,37 @@ shape = options[:shape].to_s.downcase
 if options[:stripe] && options[:stripe_height] == nil
   puts "Please supply the stripe height"
   exit
-end
-
-if shape == 'pyramid'
-  if options[:width] == nil
+elsif shape == 'pyramid'
+  if (radius = options[:width]) == nil
     puts "Please supply the width of the base"
-  else
-    base_length = options[:width].to_f
-    build_pyramid(base_length, CENTER_X - base_length/2.0, CENTER_Y - base_length/2.0, options[:stripe], options[:stripe_height])
+    exit
   end
-elsif shape == 'cone'
-  if options[:radius] == nil
+  base_length = options[:width].to_f
+  build_pyramid(base_length, CENTER_X - base_length/2.0, CENTER_Y - base_length/2.0, options[:stripe], options[:stripe_height])
+elsif shape == 'cone' || shape == 'cylinder'
+  if (radius = options[:radius]) == nil
     puts "Please supply the radius of the base"
-  elsif options[:height] == nil
+    exit
+  elsif (height = options[:height]) == nil
     puts "Please supply the height of the cone"
-  else
-    radius = options[:radius]
-    height = options[:height]
+    exit
+  end
+  if shape == 'cone'
     calc_radius = Proc.new {|radius, z_value| (z_value - height)*-radius/height.to_f + START_Z }
-    build_circle(CENTER_X, CENTER_Y, radius + 10.0)
-    build_curved_object(CENTER_X, CENTER_Y, radius, height, calc_radius, options[:stripe], options[:stripe_height])
-  end
-elsif shape == 'cylinder'
-  if options[:radius] == nil
-    puts "Please supply the radius of the base"
-  elsif options[:height] == nil
-    puts "Please supply the height of the cone"
   else
-    radius = options[:radius]
-    height = options[:height]
     calc_radius = Proc.new {|radius, z_value| radius }
-    build_circle(CENTER_X, CENTER_Y, radius + 10.0)
-    build_curved_object(CENTER_X, CENTER_Y, radius, height, calc_radius, options[:stripe], options[:stripe_height])
   end
+  build_circle(CENTER_X, CENTER_Y, radius + 10.0)
+  build_curved_object(CENTER_X, CENTER_Y, radius, height, calc_radius, options[:stripe], options[:stripe_height])
 elsif shape == 'hemisphere'
-  if options[:radius] == nil
+  if (radius = options[:radius]) == nil
     puts "Please supply the radius of the base"
-  else
-    radius = options[:radius]
-    calc_radius = Proc.new {|radius, z_value| Math.sqrt(radius**2 - (z_value-START_Z)**2) }
-    build_circle(CENTER_X, CENTER_Y, radius + 10.0)
-    build_curved_object(CENTER_X, CENTER_Y, radius, height, calc_radius, options[:stripe], options[:stripe_height])
+    exit
   end
+  calc_radius = Proc.new {|radius, z_value| Math.sqrt(radius**2 - (z_value-START_Z)**2) }
+  build_circle(CENTER_X, CENTER_Y, radius + 10.0)
+  build_curved_object(CENTER_X, CENTER_Y, radius, radius, calc_radius, options[:stripe], options[:stripe_height])
 else
   puts "Please supply a shape (pyramid, cone, hemisphere)"
+  exit
 end
