@@ -94,8 +94,12 @@ def build_pyramid(base_width, start_x, start_y, use_color, stripe_height)
 
     if use_color && colored_layer_heights.include?(layer_height)
       switch_temp(HIGH_TEMP) if $current_temp != HIGH_TEMP
+      build_square(CENTER_X - skirt_width/2.0, CENTER_Y - skirt_width/2.0, skirt_width)
+      reset_extruder
     elsif use_color && !colored_layers.include?(layer_height)
       switch_temp(NORMAL_TEMP) if $current_temp != NORMAL_TEMP
+      build_square(CENTER_X - skirt_width/2.0, CENTER_Y - skirt_width/2.0, skirt_width)
+      reset_extruder
     end
 
     build_square(start_x_offset, start_y_offset, width)
@@ -139,8 +143,12 @@ def build_curved_object(start_x, start_y, radius, height, calc_radius, use_color
 
     if use_color && colored_layer_heights.include?(z_value)
       switch_temp(HIGH_TEMP) if $current_temp != HIGH_TEMP
+      build_circle(CENTER_X, CENTER_Y, radius + 10.0)
+      reset_extruder
     elsif use_color && !colored_layers.include?(z_value)
       switch_temp(NORMAL_TEMP) if $current_temp != NORMAL_TEMP
+      build_circle(CENTER_X, CENTER_Y, radius + 10.0)
+      reset_extruder
     end
 
     build_circle(start_x, start_y, radius_max)
