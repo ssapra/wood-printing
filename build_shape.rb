@@ -27,12 +27,16 @@ end
 def build_square(start_x, start_y, length)
   puts "G0 X#{start_x} Y#{start_y}"
   $extrude += length/5
+  puts "G1 F#{FEED_RATE}"
   puts "G1 X#{start_x + length} Y#{start_y} E#{$extrude}"
   $extrude += length/5
+  puts "G1 F#{FEED_RATE}"
   puts "G1 X#{start_x + length} Y#{start_y + length} E#{$extrude}"
   $extrude += length/5
+  puts "G1 F#{FEED_RATE}"
   puts "G1 X#{start_x} Y#{start_y + length} E#{$extrude}"
   $extrude += length/5
+  puts "G1 F#{FEED_RATE}"
   puts "G1 X#{start_x} Y#{start_y} E#{$extrude}"
 end
 
@@ -47,7 +51,7 @@ def switch_temp(temp)
   puts "G1 X0 Y0"
   puts "M104 S#{temp}"
   puts "M109 S#{temp}"
-  puts "E10.0"
+  puts "E20.0"
   reset_extruder
   $current_temp = temp
 end
@@ -118,12 +122,11 @@ def build_circular_layer(start_x, start_y, radius_max)
 end
 
 def build_curved_object(start_x, start_y, radius, height, calc_radius, use_color, stripe_height)
-  build_prelude
   end_z = START_Z + height
   number_of_layers = (height - START_Z)/LAYER_HEIGHT
   (START_Z..end_z).step(LAYER_HEIGHT).each_with_index do |z_value, i|
     reset_extruder
-    set_z_value(z_value.round(4), 7800.00)
+    set_z_value(z_value.round(4), 800.00)
     radius_max = calc_radius.call(radius, z_value)
 
     layers = (START_Z..end_z).step(LAYER_HEIGHT)
@@ -204,6 +207,7 @@ elsif shape == 'cone' || shape == 'cylinder'
   else
     calc_radius = Proc.new {|radius, z_value| radius }
   end
+  build_prelude
   build_circle(CENTER_X, CENTER_Y, radius + 10.0)
   build_curved_object(CENTER_X, CENTER_Y, radius, height, calc_radius, options[:stripe], options[:stripe_height])
 elsif shape == 'hemisphere'
@@ -212,6 +216,7 @@ elsif shape == 'hemisphere'
     exit
   end
   calc_radius = Proc.new {|radius, z_value| Math.sqrt(radius**2 - (z_value-START_Z)**2) }
+  build_prelude
   build_circle(CENTER_X, CENTER_Y, radius + 10.0)
   build_curved_object(CENTER_X, CENTER_Y, radius, radius, calc_radius, options[:stripe], options[:stripe_height])
 else
