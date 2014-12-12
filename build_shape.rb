@@ -56,6 +56,23 @@ def switch_temp(temp)
   $current_temp = temp
 end
 
+def striate_temp(layer, layer_count)
+#  reset_extruder
+  temp_dif = ((layer / layer_count) * (HIGH_TEMP - NORMAL_TEMP)).to_i
+  temp = NORMAL_TEMP + temp_dif
+  if (temp_dif < 4)
+  puts "M104 S#{temp}"
+  else
+    puts "G1 X0 YO"
+    puts "M104 S#{temp}"
+    puts "M109 S#{temp}"
+    puts "E20.0"
+  end
+
+  reset_extruder
+  $current_temp = temp
+end
+
 def reset_extruder
   puts "G92 E0"
   $extrude = 0.0
@@ -65,7 +82,7 @@ def set_z_value(layer_height, feed_rate = FEED_RATE)
   puts "G1 Z#{layer_height} F#{feed_rate}"
 end
 
-def build_pyramid(base_width, start_x, start_y, use_color, stripe_height)
+def build_pyramid(base_width, start_x, start_y, use_color, stripe_height, striated)
   build_prelude
   reset_extruder
   skirt_width = [base_width + 20.0, MAX_WIDTH - 10].min
@@ -78,6 +95,7 @@ def build_pyramid(base_width, start_x, start_y, use_color, stripe_height)
 
   layers = (START_Z..end_z).step(LAYER_HEIGHT)
   colored_layer_heights = []
+
   if use_color
     stripe_layers = stripe_height / LAYER_HEIGHT
     colored_layers = (0..number_of_layers-1).partition {|layer| layer % (2.0*stripe_layers) < stripe_layers }[0]
@@ -104,8 +122,11 @@ def build_pyramid(base_width, start_x, start_y, use_color, stripe_height)
         build_square(CENTER_X - skirt_width/2.0, CENTER_Y - skirt_width/2.0, skirt_width)
         reset_extruder
       end
+    elsif striated
+      striate_temp(layer_height, end_z)
+      build_square(CENTER_X - skirt_width/2.0, CENTER_Y - skirt_width/2.0, skirt_width)
+      reset_extruder
     end
-
     build_square(start_x_offset, start_y_offset, width)
     build_square_infill(start_x_offset, start_y_offset, width)
   end
@@ -129,7 +150,7 @@ def build_circular_layer(start_x, start_y, radius_max)
   end
 end
 
-def build_curved_object(start_x, start_y, radius, height, calc_radius, use_color, stripe_height)
+def build_curved_object(start_x, start_y, radius, height, calc_radius, use_color, stripe_height, striated)
   end_z = START_Z + height
   number_of_layers = (height - START_Z)/LAYER_HEIGHT
   (START_Z..end_z).step(LAYER_HEIGHT).each_with_index do |z_value, i|
@@ -157,6 +178,10 @@ def build_curved_object(start_x, start_y, radius, height, calc_radius, use_color
         build_circle(CENTER_X, CENTER_Y, radius + 10.0)
         reset_extruder
       end
+    elsif striated
+      striate_temp(i, end_z)
+      build_circle(CENTER_X, CENTER_Y, radius + 10.0)
+      reset_extruder
     end
 
     build_circle(start_x, start_y, radius_max)
@@ -196,6 +221,11 @@ OptionParser.new do |opts|
     puts opts
     exit
   end
+
+  opts.on("--striated") do
+     options[:striated] = true
+  end
+
 end.parse!
 
 shape = options[:shape].to_s.downcase
@@ -203,13 +233,16 @@ shape = options[:shape].to_s.downcase
 if options[:stripe] && options[:stripe_height] == nil
   puts "Please supply the stripe height"
   exit
+elsif options[:stripe] && options[:striated]
+  puts "The shape cannot be both striped and striated"
+  exit
 elsif shape == 'pyramid'
   if (radius = options[:width]) == nil
     puts "Please supply the width of the base"
     exit
   end
   base_length = options[:width].to_f
-  build_pyramid(base_length, CENTER_X - base_length/2.0, CENTER_Y - base_length/2.0, options[:stripe], options[:stripe_height])
+  build_pyramid(base_length, CENTER_X - base_length/2.0, CENTER_Y - base_length/2.0, options[:stripe], options[:stripe_height], options[:striated])
 elsif shape == 'cone' || shape == 'cylinder'
   if (radius = options[:radius]) == nil
     puts "Please supply the radius of the base"
@@ -225,7 +258,7 @@ elsif shape == 'cone' || shape == 'cylinder'
   end
   build_prelude
   build_circle(CENTER_X, CENTER_Y, radius + 10.0)
-  build_curved_object(CENTER_X, CENTER_Y, radius, height, calc_radius, options[:stripe], options[:stripe_height])
+  build_curved_object(CENTER_X, CENTER_Y, radius, height, calc_radius, options[:stripe], options[:stripe_height], options[:striated])
 elsif shape == 'hemisphere'
   if (radius = options[:radius]) == nil
     puts "Please supply the radius of the base"
